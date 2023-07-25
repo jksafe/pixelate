@@ -1,175 +1,143 @@
 function newVideoExport = pixelate(fileName, filetype, newPix)
 
 if filetype == 'video'
+    inputVid = VideoReader(fileName);
+    numFrames = floor(inputVid.Duration)*inputVid.FrameRate;
+    newVideoExport = VideoWriter('pixelVideo.avi','Motion JPEG AVI');
+    open(newVideoExport);
+    
+    
+    input = read(inputVid,1);
+    input = im2double(input);
+    sizeArray = size(input);
+    r = sizeArray(1);
+    c = sizeArray(2);
+    rSteps = r/newPix;
+    cSteps = c/newPix;
+    newPix_options = flip(intersect(divisors(r),divisors(c)));
+    newPix_options = cat(2,newPix_options,flip(newPix_options));
+    newPix_num_options = length(newPix_options);
+    
 
-inputVid = VideoReader(fileName);
-numFrames = inputVid.numFrames; 
-frameRate = inputVid.FrameRate;
+    for frame = 1:1:numFrames
+        input = read(inputVid,frame);
+        input = im2double(input);
+        
+        % Create video where new pixel grain decreases with video duration,
+        % i.e. the video gets "clearer" as it progresses towards the end
+        newPix = newPix_options(ceil((frame/numFrames)*newPix_num_options));
+        
+        rSteps = r/newPix;
+        cSteps = c/newPix;
 
-newVideoExport = VideoWriter('pixelVideo.avi','Motion JPEG AVI');
-open(newVideoExport);
+        %cmpOut = [];
+        %cmpOut(:,:,1) = zeros(rSteps,cSteps);
+        %cmpOut(:,:,2) = zeros(rSteps,cSteps);
+        %cmpOut(:,:,3) = zeros(rSteps,cSteps);
 
-for frame = 1:numFrames
-    input = read(inputVid,frame);
+        fullOut = [];
+        fullOut(:,:,1) = zeros(r,c);
+        fullOut(:,:,2) = zeros(r,c);
+        fullOut(:,:,3) = zeros(r,c);
 
 
-%input = imread("img.jpg");
-sizeArray = size(input);
-r = sizeArray(1);
-c = sizeArray(2);
-clr = sizeArray(3);
-gcdRC = gcd(r,c);
-lcmRC = lcm(r,c);
-
-divr = divisors(r);
-divc= divisors(c);
-cmndiv = intersect(divr,divc);
-
-red = input(:,:,1);
-green = input(:,:,2);
-blue = input(:,:,3);
-
-fullOut = [];
-fullOut(:,:,1) = zeros(r,c);
-fullOut(:,:,2) = zeros(r,c);
-fullOut(:,:,3) = zeros(r,c);
-
-%bigOutput = [];
-
-%for z = [1 2 3 6 27 72 180]
-
-%newPix = intersectAB(z);
-%newPix = z;
-%newPix = 12;
-rSteps = r/newPix;
-cSteps = c/newPix;
-
-cmpOut = [];
-cmpOut(:,:,1) = zeros(rSteps,cSteps);
-cmpOut(:,:,2) = zeros(rSteps,cSteps);
-cmpOut(:,:,3) = zeros(rSteps,cSteps);
-
-for color=1:3
-
-for x=1:rSteps
-   for y=1:cSteps
-       floatColor = 0;
-       pixelCount = 0;
-       
-       for n=1:newPix
-           for m=1:newPix
-               floatColor = floatColor + double(input(n+(x-1)*newPix,m+(y-1)*newPix,color));
-               pixelCount = pixelCount + 1;
-           end
-       end
-       cmpOut(x,y,color) = uint8(floatColor/pixelCount);
-        for a=1:newPix
-            for b=1:newPix
-                fullOut((x-1)*newPix+a,(y-1)*newPix+b,color) = uint8(floatColor/pixelCount);
-            end
+        for color=1:3
+            activeRGB = input(:,:,color);
+            for x=1:rSteps 
+                for y=1:cSteps  
+                    floatColor = 0;       
+                    pixelCount = 0;
+              
+                    for n=1:newPix         
+                        for m=1:newPix           
+                            floatColor = floatColor + activeRGB(n+(x-1)*newPix,m+(y-1)*newPix);                                                                
+                            pixelCount = pixelCount + 1;       
+                        end                        
+                    end         
+                    
+                    %cmpOut(x,y,color) = floatColor/pixelCount;
+                            
+                    for a=1:newPix            
+                        for b=1:newPix                               
+                            fullOut((x-1)*newPix+a,(y-1)*newPix+b,color) = floatColor/pixelCount;           
+                        end                        
+                    end 
+                    
+                end                            
+            end          
         end
-   end
-  
-end
-end
+      
+        %dithering, color quantizing
+        [fullOut,cmap] = rgb2ind(fullOut,2,'dither');
+        newFrame = im2frame(fullOut,cmap);
+        
+        %no dithering, color quantizing
+        %newFrame = im2frame(fullOut);
+        
+        writeVideo(newVideoExport,newFrame);
 
-%bigOutput = cat(2,bigOutput,imresize(output,newPix));
-
-%end
-
-%[X_dither,map] = rgb2ind(uint8(output),10,'dither');
-%imshow(X_dither,map)
-
-newImage = (uint8(fullOut));
-%imresize(export,newPix,"nearest",Dither=false);
-[newImage,map] = rgb2ind(newImage,50,'nodither');
-
-
-%imshow(X_dither,map)
-
-newFrame = im2frame(newImage,map);
-writeVideo(newVideoExport,newFrame);
+% Can incorporate a reduction of sample rate by skipping through frames in
+% the import process (for x=1:#:numFrames) where # = 2, 3, ... for 1/2,
+% 1/3, ... sample rates respectively, if this is used, then it's helpful to
+% duplicate processed/pixelated images based on the sample rate to preserve
+% number of frames, framerate, and duration in output video, this could be
+% done by using a for loop to nest writeVideo and running it # times
 
 end
 
 close(newVideoExport);
 
 elseif filetype == 'image'
-input = imread(fileName);
-sizeArray = size(input);
-r = sizeArray(1);
-c = sizeArray(2);
-clr = sizeArray(3);
-gcdRC = gcd(r,c);
-lcmRC = lcm(r,c);
+    input = imread(fileName);
+    input = im2double(input);
+    sizeArray = size(input);
+    r = sizeArray(1);
+    c = sizeArray(2);
 
-divr = divisors(r);
-divc= divisors(c);
-cmndiv = intersect(divr,divc);
+    divr = divisors(r);
+    divc= divisors(c);
+    cmndiv = intersect(divr,divc);
 
-red = input(:,:,1);
-green = input(:,:,2);
-blue = input(:,:,3);
+    rSteps = r/newPix;
+    cSteps = c/newPix;
+    
+    cmpOut = [];
+    cmpOut(:,:,1) = zeros(rSteps,cSteps);
+    cmpOut(:,:,2) = zeros(rSteps,cSteps);
+    cmpOut(:,:,3) = zeros(rSteps,cSteps);
+    
+    fullOut = [];
+    fullOut(:,:,1) = zeros(r,c);
+    fullOut(:,:,2) = zeros(r,c);
+    fullOut(:,:,3) = zeros(r,c);
 
-fullOut = [];
-fullOut(:,:,1) = zeros(r,c);
-fullOut(:,:,2) = zeros(r,c);
-fullOut(:,:,3) = zeros(r,c);
+    for color=1:3
+        activeRGB=input(:,:,color);
 
-%bigOutput = [];
-
-%for z = [1 2 3 6 27 72 180]
-
-%newPix = intersectAB(z);
-%newPix = z;
-%newPix = 12;
-rSteps = r/newPix;
-cSteps = c/newPix;
-
-cmpOut = [];
-cmpOut(:,:,1) = zeros(rSteps,cSteps);
-cmpOut(:,:,2) = zeros(rSteps,cSteps);
-cmpOut(:,:,3) = zeros(rSteps,cSteps);
-
-for color=1:3
-
-for x=1:rSteps
-   for y=1:cSteps
-       floatColor = 0;
-       pixelCount = 0;
+        for x=1:rSteps
+            for y=1:cSteps
+                floatColor = 0;
+                pixelCount = 0;              
+                for n=1:newPix
+                    for m=1:newPix   
+                        floatColor = floatColor + activeRGB(n+(x-1)*newPix,m+(y-1)*newPix);  
+                        pixelCount = pixelCount + 1;      
+                    end               
+                end
+                
+                cmpOut(x,y,color) = uint8(floatColor/pixelCount);
        
-       for n=1:newPix
-           for m=1:newPix
-               floatColor = floatColor + double(input(n+(x-1)*newPix,m+(y-1)*newPix,color));
-               pixelCount = pixelCount + 1;
-           end
-       end
-       cmpOut(x,y,color) = uint8(floatColor/pixelCount);
-        for a=1:newPix
-            for b=1:newPix
-                fullOut((x-1)*newPix+a,(y-1)*newPix+b,color) = uint8(floatColor/pixelCount);
-            end
-        end
-   end
-  
-end
-end
-
-%bigOutput = cat(2,bigOutput,imresize(output,newPix));
-
-%end
-
-%[X_dither,map] = rgb2ind(uint8(output),10,'dither');
-%imshow(X_dither,map)
-
-export = (uint8(fullOut));
-%imresize(export,newPix,"nearest",Dither=false);
-%[export,map] = rgb2ind(export,50,'nodither');
-imshow(export);
+                for a=1:newPix        
+                    for b=1:newPix                                                     
+                        fullOut((x-1)*newPix+a,(y-1)*newPix+b,color) = floatColor/pixelCount;          
+                    end                  
+                end                               
+            end                       
+        end        
+    end
+    
+    newVideoExport = fullOut;
 
 end
 
 end
-
-%implay('pixelVideo.avi')
-%imshow(uint8(bigOutput))
