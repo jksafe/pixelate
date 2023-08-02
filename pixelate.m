@@ -1,143 +1,90 @@
-function newVideoExport = pixelate(fileName, filetype, newPix)
+function [compressed_cell,fullsize_cell] = pixelate(input_object)
 
-if filetype == 'video'
-    inputVid = VideoReader(fileName);
-    numFrames = floor(inputVid.Duration)*inputVid.FrameRate;
-    newVideoExport = VideoWriter('pixelVideo.avi','Motion JPEG AVI');
-    open(newVideoExport);
-    
-    
-    input = read(inputVid,1);
-    input = im2double(input);
-    sizeArray = size(input);
-    r = sizeArray(1);
-    c = sizeArray(2);
-    rSteps = r/newPix;
-    cSteps = c/newPix;
-    newPix_options = flip(intersect(divisors(r),divisors(c)));
-    newPix_options = cat(2,newPix_options,flip(newPix_options));
-    newPix_num_options = length(newPix_options);
-    
+image_filetypes = ['.BMP .GIF .HDF .JPEG .JPG .JP2 .JPF .JPX .J2C .J2K .PBM .PCX .PGM .PNG .PNM .PPM .RAS .TIFF .TIF .XWD .CUR .ICO'];
+vid_filetypes = ['.AVI .MJ2 .MPG .ASF .WMV .MP4 .M4V .MOV .MPG'];
+compressed_cell = {};
+fullsize_cell = {};
 
-    for frame = 1:1:numFrames
-        input = read(inputVid,frame);
-        input = im2double(input);
-        
-        % Create video where new pixel grain decreases with video duration,
-        % i.e. the video gets "clearer" as it progresses towards the end
-        newPix = newPix_options(ceil((frame/numFrames)*newPix_num_options));
-        
-        rSteps = r/newPix;
-        cSteps = c/newPix;
-
-        %cmpOut = [];
-        %cmpOut(:,:,1) = zeros(rSteps,cSteps);
-        %cmpOut(:,:,2) = zeros(rSteps,cSteps);
-        %cmpOut(:,:,3) = zeros(rSteps,cSteps);
-
-        fullOut = [];
-        fullOut(:,:,1) = zeros(r,c);
-        fullOut(:,:,2) = zeros(r,c);
-        fullOut(:,:,3) = zeros(r,c);
-
-
-        for color=1:3
-            activeRGB = input(:,:,color);
-            for x=1:rSteps 
-                for y=1:cSteps  
-                    floatColor = 0;       
-                    pixelCount = 0;
-              
-                    for n=1:newPix         
-                        for m=1:newPix           
-                            floatColor = floatColor + activeRGB(n+(x-1)*newPix,m+(y-1)*newPix);                                                                
-                            pixelCount = pixelCount + 1;       
-                        end                        
-                    end         
-                    
-                    %cmpOut(x,y,color) = floatColor/pixelCount;
-                            
-                    for a=1:newPix            
-                        for b=1:newPix                               
-                            fullOut((x-1)*newPix+a,(y-1)*newPix+b,color) = floatColor/pixelCount;           
-                        end                        
-                    end 
-                    
-                end                            
-            end          
-        end
-      
-        %dithering, color quantizing
-        [fullOut,cmap] = rgb2ind(fullOut,2,'dither');
-        newFrame = im2frame(fullOut,cmap);
-        
-        %no dithering, color quantizing
-        %newFrame = im2frame(fullOut);
-        
-        writeVideo(newVideoExport,newFrame);
-
-% Can incorporate a reduction of sample rate by skipping through frames in
-% the import process (for x=1:#:numFrames) where # = 2, 3, ... for 1/2,
-% 1/3, ... sample rates respectively, if this is used, then it's helpful to
-% duplicate processed/pixelated images based on the sample rate to preserve
-% number of frames, framerate, and duration in output video, this could be
-% done by using a for loop to nest writeVideo and running it # times
-
+if isa(input_object,'numeric') == 1
+    input_temp = input_object;
+    input_object = {};
+    input_object{end+1} = input_temp;
+elseif exist(input_object) == 2
+    input_object = imgvid2cell(input_object); 
 end
 
-close(newVideoExport);
-
-elseif filetype == 'image'
-    input = imread(fileName);
-    input = im2double(input);
-    sizeArray = size(input);
-    r = sizeArray(1);
-    c = sizeArray(2);
-
-    divr = divisors(r);
-    divc= divisors(c);
-    cmndiv = intersect(divr,divc);
-
-    rSteps = r/newPix;
-    cSteps = c/newPix;
+input_image = im2double(input_object{1});
+[rows,cols,colors] = size(input_image);        
+div_rows = divisors(rows);            
+div_cols= divisors(cols);       
+div_shared = intersect(div_rows,div_cols);    
+div_shared_text = regexprep(num2str(div_shared),' +',' ');    
+prompt = cat(2,'Grain size options: ',div_shared_text);        
+prompt = [prompt char(10) 'Enter value(s) from above or use "all":'];    
+new_pixelGrain = input(prompt,'s');    
     
-    cmpOut = [];
-    cmpOut(:,:,1) = zeros(rSteps,cSteps);
-    cmpOut(:,:,2) = zeros(rSteps,cSteps);
-    cmpOut(:,:,3) = zeros(rSteps,cSteps);
+if strcmp(new_pixelGrain,'all') == 1        
+    new_pixelGrain_options = cat(2,div_shared,flip(div_shared));        
+    new_pixelGrain_length = length(new_pixelGrain_options);
+          
+    if length(input_object) == 1            
+        for count=1:new_pixelGrain_length               
+            input_object{end+1} = input_image;            
+        end
+    end   
+else
+   new_pixelGrain = str2double(new_pixelGrain);
+   new_pixelGrain_options = [new_pixelGrain];
+   new_pixelGrain_length = length(new_pixelGrain_options);
+end
+
+num_cells = length(input_object);
+      
+for a=1:num_cells         
+    input_image = im2double(input_object{a});
+        
+    new_pixelGrain = new_pixelGrain_options(ceil((a/num_cells)*new_pixelGrain_length));    
     
-    fullOut = [];
-    fullOut(:,:,1) = zeros(r,c);
-    fullOut(:,:,2) = zeros(r,c);
-    fullOut(:,:,3) = zeros(r,c);
+    rSteps = rows/new_pixelGrain;
+    cSteps = cols/new_pixelGrain;
 
-    for color=1:3
-        activeRGB=input(:,:,color);
-
-        for x=1:rSteps
-            for y=1:cSteps
-                floatColor = 0;
-                pixelCount = 0;              
-                for n=1:newPix
-                    for m=1:newPix   
-                        floatColor = floatColor + activeRGB(n+(x-1)*newPix,m+(y-1)*newPix);  
-                        pixelCount = pixelCount + 1;      
-                    end               
-                end
+    compressed_image = [];    
+    compressed_image(:,:,1) = zeros(rSteps,cSteps);
+    compressed_image(:,:,2) = zeros(rSteps,cSteps);    
+    compressed_image(:,:,3) = zeros(rSteps,cSteps);
+    fullsize_image = [];
+    fullsize_image(:,:,1) = zeros(rows,cols);
+    fullsize_image(:,:,2) = zeros(rows,cols);
+    fullsize_image(:,:,3) = zeros(rows,cols);
+   
+    for clr=1:colors     
+        activeRGB=input_image(:,:,clr);
+        for x=1:rSteps                
+            for y=1:cSteps               
+                floatColor = 0;                 
+                pixelCount = new_pixelGrain^2;               
                 
-                cmpOut(x,y,color) = uint8(floatColor/pixelCount);
-       
-                for a=1:newPix        
-                    for b=1:newPix                                                     
-                        fullOut((x-1)*newPix+a,(y-1)*newPix+b,color) = floatColor/pixelCount;          
-                    end                  
-                end                               
-            end                       
-        end        
+                for n=1:new_pixelGrain                    
+                    for m=1:new_pixelGrain                          
+                        floatColor = floatColor + activeRGB(n+(x-1)*new_pixelGrain,m+(y-1)*new_pixelGrain);                    
+                    end                    
+                end
+                                
+                new_pixelColor = floatColor/pixelCount;           
+                compressed_image(x,y,clr) = new_pixelColor;                
+
+                for a=1:new_pixelGrain                    
+                    for b=1:new_pixelGrain                                                                                  
+                        fullsize_image((x-1)*new_pixelGrain+a,(y-1)*new_pixelGrain+b,clr) = new_pixelColor;                                                    
+                    end                    
+                end                
+            end            
+        end     
     end
     
-    newVideoExport = fullOut;
-
+    compressed_cell{end+1} = compressed_image;
+    fullsize_cell{end+1} = fullsize_image;
+    
 end
 
 end
